@@ -1,0 +1,71 @@
+"""Pricing data and cost calculations.
+
+Prices are loaded from prices.json and cached. Keep this module dependency-free
+so it works even without openai or anthropic installed.
+"""
+import json
+from pathlib import Path
+from typing import Optional, Dict, List, Tuple
+
+_PRICES_FILE = Path(__file__).parent / "prices.json"
+_prices_cache: Optional[Dict] = None
+
+
+def _load_prices() -> Dict:
+    global _prices_cache
+    if _prices_cache is None:
+        with open(_PRICES_FILE) as f:
+            data = json.load(f)
+        # Drop the _meta key so it doesn't show up as a provider
+        _prices_cache = {k: v for k, v in data.items() if not k.startswith("_")}
+    return _prices_cache
+
+
+def get_price(provider: str, model: str) -> Optional[Dict[str, float]]:
+    """Get price per 1M tokens for a model.
+
+    Returns dict with 'input' and 'output' keys, or None if model unknown.
+    Handles dated model strings via prefix matching.
+    """
+    prices = _load_prices()
+    provider_prices = prices.get(provider, {})
+    if model in provider_prices:
+        return provider_prices[model]
+    # Prefix match: 'gpt-4o-2024-11-20' should match 'gpt-4o'
+    candidates = [
+        (known, price)
+        for known, price in provider_prices.items()
+        if model.startswith(known) or known.startswith(model)
+    ]
+    if candidates:
+        # Prefer the longest known prefix
+        candidates.sort(key=lambda x: -len(x[0]))
+        return candidates[0][1]
+    return None
+
+
+def calculate_cost(
+    provider: str, model: str, input_tokens: int, output_tokens: int
+) -> float:
+    """Calculate cost in USD for a given call. Returns 0.0 if model is unknown."""
+    price = get_price(provider, model)
+    if price is None:
+        return 0.0
+    return (
+        input_tokens * price["input"] + output_tokens * price["output"]
+    ) / 1_000_000
+
+
+def list_models(provider: Optional[str] = None) -> List[Tuple[str, str]]:
+    """List all known (provider, model) pairs, optionally filtered by provider."""
+    prices = _load_prices()
+    if provider:
+        return [(provider, m) for m in prices.get(provider, {}).keys()]
+    return [(p, m) for p, models in prices.items() for m in models.keys()]
+
+
+def reload_prices() -> None:
+    """Force reload of prices from disk. Useful if prices.json is updated at runtime."""
+    global _prices_cache
+    _prices_cache = None
+    _load_prices()
