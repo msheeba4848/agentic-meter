@@ -5,6 +5,7 @@ import contextvars
 import functools
 import json
 import time
+from contextlib import contextmanager
 from dataclasses import dataclass, field, asdict
 from typing import Any, Callable, Dict, List, Optional, Union
 
@@ -33,6 +34,7 @@ class Call:
     error: Optional[str] = None
     prompt_hash: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
+    tags: List[str] = field(default_factory=list)
 
 
 def _parse_budget(budget: Union[str, int, float, None]) -> Optional[float]:
@@ -83,6 +85,7 @@ class Ledger:
         self.on_budget_exceeded = on_budget_exceeded
         self.calls: List[Call] = []
         self._token: Optional[contextvars.Token] = None
+        self._tag_stack: List[str] = []
 
     # ---- Context manager ----
 
@@ -129,6 +132,7 @@ class Ledger:
         error: Optional[str] = None,
         prompt_hash: Optional[str] = None,
         metadata: Optional[Dict] = None,
+        tags: Optional[List[str]] = None,
     ) -> Call:
         """Manually record a call. Use this for providers without auto-tracking."""
         cost = (
@@ -136,6 +140,10 @@ class Ledger:
             if failed
             else calculate_cost(provider, model, input_tokens, output_tokens)
         )
+        # Combine any explicit tags with the current tag stack
+        effective_tags = list(self._tag_stack)
+        if tags:
+            effective_tags.extend(tags)
         call = Call(
             provider=provider,
             model=model,
@@ -149,6 +157,7 @@ class Ledger:
             error=error,
             prompt_hash=prompt_hash,
             metadata=metadata or {},
+            tags=effective_tags,
         )
         self.calls.append(call)
         self._check_budget()
@@ -264,6 +273,68 @@ class Ledger:
         provider, model = cheapest_key.split("/", 1)
         return (provider, model, cheapest_cost)
 
+    # ---- Tagging (per-agent / per-feature attribution) ----
+
+    @contextmanager
+    def tag(self, name: str):
+        """Push a tag onto the stack for the duration of this block.
+
+        Every call recorded inside gets stamped with this tag. Nested tags
+        compose - a call inside `with ledger.tag('pipeline'): with ledger.tag('researcher'):`
+        gets both tags but is attributed to the innermost ('researcher') by by_tag().
+
+        Example:
+            with Ledger() as l:
+                with l.tag('researcher'):
+                    researcher.invoke(...)
+                with l.tag('writer'):
+                    writer.invoke(...)
+            print(l.by_tag())
+        """
+        self._tag_stack.append(name)
+        try:
+            yield self
+        finally:
+            self._tag_stack.pop()
+
+    def by_tag(self) -> Dict[str, float]:
+        """Cost breakdown by innermost (most specific) tag.
+
+        Calls without any tag are grouped under '_untagged'. The sum across
+        all keys equals total_cost (single-attribution, no double counting).
+        """
+        out: Dict[str, float] = {}
+        for c in self.calls:
+            if c.failed:
+                continue
+            tag = c.tags[-1] if c.tags else "_untagged"
+            out[tag] = out.get(tag, 0.0) + c.cost
+        return out
+
+    def calls_by_tag(self) -> Dict[str, int]:
+        """Call count by innermost tag."""
+        out: Dict[str, int] = {}
+        for c in self.calls:
+            tag = c.tags[-1] if c.tags else "_untagged"
+            out[tag] = out.get(tag, 0) + 1
+        return out
+
+    # ---- LangChain integration ----
+
+    def as_langchain_callback(self):
+        """Return a LangChain BaseCallbackHandler that records into this Ledger.
+
+        Requires langchain-core to be installed:
+            pip install 'agentledger[langchain]'
+
+        Example:
+            with Ledger(budget='$1.00') as ledger:
+                cb = ledger.as_langchain_callback()
+                response = llm.invoke('hello', config={'callbacks': [cb]})
+        """
+        from .langchain import AgentLedgerCallback
+        return AgentLedgerCallback()
+
     # ---- Reporting ----
 
     def summary(self) -> str:
@@ -293,6 +364,17 @@ class Ledger:
             lines.append("By provider:")
             for p, cost in sorted(by_provider.items(), key=lambda x: -x[1]):
                 lines.append(f"  {p:14s}${cost:.4f}")
+
+        # By tag (per-agent / per-feature attribution)
+        by_tag = self.by_tag()
+        # Only show this section if there are real tags (not just _untagged)
+        if by_tag and not (len(by_tag) == 1 and "_untagged" in by_tag):
+            lines.append("")
+            lines.append("By tag:")
+            calls_per_tag = self.calls_by_tag()
+            for t, cost in sorted(by_tag.items(), key=lambda x: -x[1]):
+                count = calls_per_tag.get(t, 0)
+                lines.append(f"  {t:14s}${cost:.4f}  ({count} calls)")
 
         # Waste section
         retries = self.detect_retries()
