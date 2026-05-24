@@ -53,7 +53,7 @@ def patch_anthropic() -> None:
     except ImportError:
         return  # anthropic SDK not installed
 
-    from ..ledger import _current_ledger
+    from ..ledger import _current_ledger, _sdk_tracking_suppressed
 
     _originals["sync"] = Messages.create
     _originals["async"] = AsyncMessages.create
@@ -87,7 +87,7 @@ def patch_anthropic() -> None:
 
     def sync_create(self, *args, **kwargs):
         ledger = _current_ledger.get()
-        if ledger is None:
+        if ledger is None or _sdk_tracking_suppressed.get() > 0:
             return _originals["sync"](self, *args, **kwargs)
         start = time.time()
         try:
@@ -100,7 +100,7 @@ def patch_anthropic() -> None:
 
     async def async_create(self, *args, **kwargs):
         ledger = _current_ledger.get()
-        if ledger is None:
+        if ledger is None or _sdk_tracking_suppressed.get() > 0:
             return await _originals["async"](self, *args, **kwargs)
         start = time.time()
         try:

@@ -1,27 +1,30 @@
 """LangChain callback handler for agentledger.
 
-LangChain wraps provider responses inside its own LLMResult object, so token usage is not exposed as response.usage like it is when using the raw SDK. Instead, usage data is usually found in llm_output["token_usage"] or generations[0][0].message.usage_metadata.
+LangChain wraps provider responses in its own `LLMResult` object, and token
+usage lives in `llm_output['token_usage']` or `generations[0][0].message.usage_metadata`
+rather than `response.usage` like the raw SDK. This module handles that wrapping
+correctly and works for both chat models and completion models, sync and async,
+streaming and non-streaming.
 
-This module accounts for LangChain’s response structure and supports chat models, completion models, synchronous calls, asynchronous calls, streaming, and non-streaming usage.
-
-Use this module whenever you are calling models through LangChain. Although the raw SDK monkey patch in agentledger.trackers may still be triggered, it cannot reliably extract token counts because LangChain’s internal call flow hides the original usage object.
+Use this whenever you're working through LangChain — the raw-SDK monkey-patch
+in agentledger.trackers will fire but won't extract tokens correctly because
+LangChain's calling pattern hides the usage object.
 
 Quickstart:
 
     from agentledger import Ledger
     from langchain_openai import ChatOpenAI
 
-    llm = ChatOpenAI(model="add your model here", temperature=0, callbacks=[])
+    llm = ChatOpenAI(model="gpt-4o-mini")
 
     with Ledger(budget="$1.00") as ledger:
         cb = ledger.as_langchain_callback()
         response = llm.invoke("hello", config={"callbacks": [cb]})
 
     print(ledger.summary())
-
 """
-from __future__ import annotations
 
+from __future__ import annotations
 import hashlib
 import json
 import time
@@ -42,7 +45,7 @@ except ImportError:
         pass
 
 
-from .ledger import _current_ledger
+from .ledger import _current_ledger, _sdk_tracking_suppressed 
 
 
 class AgentLedgerCallback(BaseCallbackHandler):
@@ -183,6 +186,11 @@ class AgentLedgerCallback(BaseCallbackHandler):
             self._cleanup_run(run_id)
 
     def _cleanup_run(self, run_id: UUID) -> None:
+        # Only decrement if we actually started tracking this run; if the callback was invoked
+        if run_id in self._starts:
+            current = _sdk_tracking_suppressed.get()
+            if current > 0:
+                _sdk_tracking_suppressed.set(current - 1)
         self._starts.pop(run_id, None)
         self._prompts.pop(run_id, None)
         self._params.pop(run_id, None)

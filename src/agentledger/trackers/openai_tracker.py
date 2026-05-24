@@ -57,7 +57,7 @@ def patch_openai() -> None:
         return  # openai SDK not installed
 
     # Late import to avoid circular dependency
-    from ..ledger import _current_ledger
+    from ..ledger import _current_ledger, _sdk_tracking_suppressed
 
     _originals["sync"] = Completions.create
     _originals["async"] = AsyncCompletions.create
@@ -89,7 +89,8 @@ def patch_openai() -> None:
 
     def sync_create(self, *args, **kwargs):
         ledger = _current_ledger.get()
-        if ledger is None:
+        # Bail if there is no ledger which is active or if there is a higher intregation (for example, LangChain callback) which will handle this call
+        if ledger is None or _sdk_tracking_suppressed.get() > 0:
             return _originals["sync"](self, *args, **kwargs)
         start = time.time()
         try:

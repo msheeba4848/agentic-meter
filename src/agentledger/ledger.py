@@ -12,10 +12,12 @@ from typing import Any, Callable, Dict, List, Optional, Union
 from .pricing import calculate_cost, list_models
 from .exceptions import BudgetExceeded
 
-
+# When price is greated than 0, the raw-SDK money-patches skip recording, because there is a higher-level integration (like langchain callback) which is already handling this call. 
+# This prevents the double-counting when the Langchain's ChatOpenAI callback is used, which also records calls into the ledger. The raw-SDK patches still need to be applied to catch calls that don't go through Langchain, but they can skip recording when a higher-level integration is in use.
 # ContextVar so nested contexts and async tasks each see the right ledger.
-_current_ledger: contextvars.ContextVar[Optional["Ledger"]] = contextvars.ContextVar(
-    "current_ledger", default=None
+
+_sdk_tracking_suppressed: contextvars.ContextVar[int] = contextvars.ContextVar(
+    "sdk_tracking_suppressed", default=0
 )
 
 
@@ -377,8 +379,8 @@ class Ledger:
         lines.append(title)
         lines.append("=" * len(title))
 
-        budget_str = f" / ${self.budget:.4f}" if self.budget is not None else ""
-        lines.append(f"Total spent:      ${self.total_cost:.4f}{budget_str}")
+        budget_str = f" / ${self.budget:.8f}" if self.budget is not None else ""
+        lines.append(f"Total spent:      ${self.total_cost:.8f}{budget_str}")
         lines.append(
             f"Total calls:      {self.total_calls}  "
             f"({self.successful_calls} ok, {self.failed_calls} failed)"
@@ -396,7 +398,7 @@ class Ledger:
             lines.append("")
             lines.append("By provider:")
             for p, cost in sorted(by_provider.items(), key=lambda x: -x[1]):
-                lines.append(f"  {p:14s}${cost:.4f}")
+                lines.append(f"  {p:14s}${cost:.8f}")
 
         # By tag (per-agent / per-feature attribution)
         by_tag = self.by_tag()
@@ -443,7 +445,7 @@ class Ledger:
                 lines.append("Cheaper Alternatives (Exact Same Workload): ")
                 for model, cost, savings_pct in alternatives[:5]:
                     lines.append(
-                        f"  {model:42s} ${cost:.3f} (save {savings_pct:.0f})"
+                        f"  {model:42s} ${cost:.3f} (save {savings_pct:.0f}%)"
                     )
 
         return "\n".join(lines)
