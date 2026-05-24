@@ -272,13 +272,9 @@ class Ledger:
         cheapest_key, cheapest_cost = min(nonzero, key=lambda x: x[1])
         provider, model = cheapest_key.split("/", 1)
         return (provider, model, cheapest_cost)
-    
-
-    # --- adding the saving opportunity of switching to the cheapest alternative in the report summary ---
 
     def savings_opportunities(self) -> List[tuple]:
-        """Models that would save money on this workload. Models that would save money for the workload. It would tell you in comparison which model would be a cheaper alternative. 
-        It returns a list of (model_key, alt_cost, savings_pct)
+        """Models that would save money on this workload.
 
         Returns a list of (model_key, alt_cost, savings_pct) tuples, sorted by
         biggest savings first. Excludes models that cost the same or more than
@@ -435,15 +431,15 @@ class Ledger:
             if failed:
                 lines.append(f"  Failed:         {len(failed)} calls")
 
-        # Counterfactuals - top 3 cheapest alternatives
+        # Cheaper alternatives - only show models that would actually save money
         if self.total_cost > 0:
             alternatives = self.savings_opportunities()
-            if alternatives: 
+            if alternatives:
                 lines.append("")
-                lines.append("Cheaper Alternatives (Exact Same Workload): ")
-                for model, cost, savings_pct in alternatives[:5]:
+                lines.append("Cheaper alternatives (same workload):")
+                for model, cost, savings_pct in alternatives[:3]:
                     lines.append(
-                        f"  {model:42s} ${cost:.3f} (save {savings_pct:.0f})"
+                        f"  {model:42s} ${cost:.4f}  (save {savings_pct:.0f}%)"
                     )
 
         return "\n".join(lines)
