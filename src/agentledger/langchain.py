@@ -23,8 +23,8 @@ Quickstart:
 
     print(ledger.summary())
 """
-
 from __future__ import annotations
+
 import hashlib
 import json
 import time
@@ -45,7 +45,7 @@ except ImportError:
         pass
 
 
-from .ledger import _current_ledger, _sdk_tracking_suppressed 
+from .ledger import _current_ledger
 
 
 class AgentLedgerCallback(BaseCallbackHandler):
@@ -83,6 +83,14 @@ class AgentLedgerCallback(BaseCallbackHandler):
     ) -> None:
         """Chat-model invocation started (ChatOpenAI, ChatAnthropic, etc.)."""
         self._starts[run_id] = time.time()
+        # Suppress the raw-SDK monkey-patch for this call. The Ledger attribute
+        # is mutated directly (rather than a ContextVar) because LangChain runs
+        # callbacks in a copied context where ContextVar.set() wouldn't
+        # propagate back to where the SDK call actually fires.
+        ledger = _current_ledger.get()
+        if ledger is not None:
+            with ledger._suppress_lock:
+                ledger._suppress_sdk += 1
         try:
             self._prompts[run_id] = [
                 [getattr(m, "content", str(m)) for m in msg_list]
@@ -105,6 +113,10 @@ class AgentLedgerCallback(BaseCallbackHandler):
     ) -> None:
         """Completion-model invocation started (legacy OpenAI completions, etc.)."""
         self._starts[run_id] = time.time()
+        ledger = _current_ledger.get()
+        if ledger is not None:
+            with ledger._suppress_lock:
+                ledger._suppress_sdk += 1
         self._prompts[run_id] = prompts
         self._params[run_id] = kwargs.get("invocation_params") or {}
 
@@ -137,6 +149,8 @@ class AgentLedgerCallback(BaseCallbackHandler):
                 model=model,
                 input_tokens=usage["input_tokens"],
                 output_tokens=usage["output_tokens"],
+                cached_read_tokens=usage.get("cached_read_tokens", 0),
+                cached_write_tokens=usage.get("cached_write_tokens", 0),
                 duration=duration,
                 finish_reason=finish_reason,
                 prompt_hash=self._hash_prompt(prompts),
@@ -186,11 +200,13 @@ class AgentLedgerCallback(BaseCallbackHandler):
             self._cleanup_run(run_id)
 
     def _cleanup_run(self, run_id: UUID) -> None:
-        # Only decrement if we actually started tracking this run; if the callback was invoked
+        # Only decrement if we actually started this run (otherwise we'd underflow)
         if run_id in self._starts:
-            current = _sdk_tracking_suppressed.get()
-            if current > 0:
-                _sdk_tracking_suppressed.set(current - 1)
+            ledger = _current_ledger.get()
+            if ledger is not None:
+                with ledger._suppress_lock:
+                    if ledger._suppress_sdk > 0:
+                        ledger._suppress_sdk -= 1
         self._starts.pop(run_id, None)
         self._prompts.pop(run_id, None)
         self._params.pop(run_id, None)
@@ -208,8 +224,14 @@ class AgentLedgerCallback(BaseCallbackHandler):
           2. response.llm_output['usage'] (some Anthropic versions)
           3. response.generations[0][0].message.usage_metadata (newer langchain-openai)
           4. response.generations[0][0].generation_info (finish_reason)
+        Cache fields live in input_token_details inside usage_metadata.
         """
-        usage = {"input_tokens": 0, "output_tokens": 0}
+        usage = {
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cached_read_tokens": 0,
+            "cached_write_tokens": 0,
+        }
         model = params.get("model") or params.get("model_name") or "unknown"
         finish_reason: Optional[str] = None
 
@@ -220,7 +242,14 @@ class AgentLedgerCallback(BaseCallbackHandler):
         if isinstance(token_usage, dict):
             # OpenAI naming
             if "prompt_tokens" in token_usage:
-                usage["input_tokens"] = int(token_usage.get("prompt_tokens", 0) or 0)
+                raw_prompt = int(token_usage.get("prompt_tokens", 0) or 0)
+                cached = 0
+                # OpenAI nests cached_tokens in prompt_tokens_details
+                details = token_usage.get("prompt_tokens_details") or {}
+                if isinstance(details, dict):
+                    cached = int(details.get("cached_tokens", 0) or 0)
+                usage["cached_read_tokens"] = cached
+                usage["input_tokens"] = max(0, raw_prompt - cached)
                 usage["output_tokens"] = int(
                     token_usage.get("completion_tokens", 0) or 0
                 )
@@ -229,6 +258,12 @@ class AgentLedgerCallback(BaseCallbackHandler):
                 usage["input_tokens"] = int(token_usage.get("input_tokens", 0) or 0)
                 usage["output_tokens"] = int(
                     token_usage.get("output_tokens", 0) or 0
+                )
+                usage["cached_read_tokens"] = int(
+                    token_usage.get("cache_read_input_tokens", 0) or 0
+                )
+                usage["cached_write_tokens"] = int(
+                    token_usage.get("cache_creation_input_tokens", 0) or 0
                 )
 
         # Override model name if llm_output has a more accurate one
@@ -252,8 +287,27 @@ class AgentLedgerCallback(BaseCallbackHandler):
                     message = getattr(gen, "message", None)
                     um = getattr(message, "usage_metadata", None) if message else None
                     if isinstance(um, dict):
-                        usage["input_tokens"] = int(um.get("input_tokens", 0) or 0)
+                        in_tok = int(um.get("input_tokens", 0) or 0)
                         usage["output_tokens"] = int(um.get("output_tokens", 0) or 0)
+                        # Cache details live in input_token_details
+                        in_details = um.get("input_token_details") or {}
+                        if isinstance(in_details, dict):
+                            usage["cached_read_tokens"] = int(
+                                in_details.get("cache_read", 0) or 0
+                            )
+                            usage["cached_write_tokens"] = int(
+                                in_details.get("cache_creation", 0) or 0
+                            )
+                        # For OpenAI-style: in_tok includes cached; subtract.
+                        # For Anthropic-style: in_tok is already uncached.
+                        # We can't easily tell here, so we infer from cache_creation:
+                        # if cache_creation > 0, it's Anthropic-style.
+                        if usage["cached_write_tokens"] > 0:
+                            usage["input_tokens"] = in_tok
+                        else:
+                            usage["input_tokens"] = max(
+                                0, in_tok - usage["cached_read_tokens"]
+                            )
 
                 # Fallback model name from message.response_metadata
                 if model == "unknown":

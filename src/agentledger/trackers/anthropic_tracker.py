@@ -23,10 +23,16 @@ def _hash_prompt(messages: Any, system: Any = None) -> Optional[str]:
 
 
 def _extract_usage(response: Any) -> Dict[str, Any]:
-    """Pull tokens, model, and stop_reason out of an Anthropic response."""
+    """Pull tokens, model, and stop_reason out of an Anthropic response.
+
+    Anthropic's usage.input_tokens is already EXCLUSIVE of cached tokens, which
+    appear as separate fields cache_read_input_tokens / cache_creation_input_tokens.
+    """
     out = {
         "input_tokens": 0,
         "output_tokens": 0,
+        "cached_read_tokens": 0,
+        "cached_write_tokens": 0,
         "model": "unknown",
         "finish_reason": None,
     }
@@ -35,8 +41,13 @@ def _extract_usage(response: Any) -> Dict[str, Any]:
         if usage is not None:
             out["input_tokens"] = getattr(usage, "input_tokens", 0) or 0
             out["output_tokens"] = getattr(usage, "output_tokens", 0) or 0
+            out["cached_read_tokens"] = (
+                getattr(usage, "cache_read_input_tokens", 0) or 0
+            )
+            out["cached_write_tokens"] = (
+                getattr(usage, "cache_creation_input_tokens", 0) or 0
+            )
         out["model"] = getattr(response, "model", "unknown") or "unknown"
-        # Anthropic uses stop_reason; we normalize 'max_tokens' to itself
         out["finish_reason"] = getattr(response, "stop_reason", None)
     except Exception:
         pass
@@ -53,7 +64,7 @@ def patch_anthropic() -> None:
     except ImportError:
         return  # anthropic SDK not installed
 
-    from ..ledger import _current_ledger, _sdk_tracking_suppressed
+    from ..ledger import _current_ledger
 
     _originals["sync"] = Messages.create
     _originals["async"] = AsyncMessages.create
@@ -80,6 +91,8 @@ def patch_anthropic() -> None:
             model=info["model"],
             input_tokens=info["input_tokens"],
             output_tokens=info["output_tokens"],
+            cached_read_tokens=info["cached_read_tokens"],
+            cached_write_tokens=info["cached_write_tokens"],
             duration=duration,
             finish_reason=info["finish_reason"],
             prompt_hash=prompt_hash,
@@ -87,7 +100,7 @@ def patch_anthropic() -> None:
 
     def sync_create(self, *args, **kwargs):
         ledger = _current_ledger.get()
-        if ledger is None or _sdk_tracking_suppressed.get() > 0:
+        if ledger is None or ledger._suppress_sdk > 0:
             return _originals["sync"](self, *args, **kwargs)
         start = time.time()
         try:
@@ -100,7 +113,7 @@ def patch_anthropic() -> None:
 
     async def async_create(self, *args, **kwargs):
         ledger = _current_ledger.get()
-        if ledger is None or _sdk_tracking_suppressed.get() > 0:
+        if ledger is None or ledger._suppress_sdk > 0:
             return await _originals["async"](self, *args, **kwargs)
         start = time.time()
         try:

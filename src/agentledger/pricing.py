@@ -45,14 +45,32 @@ def get_price(provider: str, model: str) -> Optional[Dict[str, float]]:
 
 
 def calculate_cost(
-    provider: str, model: str, input_tokens: int, output_tokens: int
+    provider: str,
+    model: str,
+    input_tokens: int,
+    output_tokens: int,
+    cached_read_tokens: int = 0,
+    cached_write_tokens: int = 0,
 ) -> float:
-    """Calculate cost in USD for a given call. Returns 0.0 if model is unknown."""
+    """Calculate cost in USD for a given call.
+
+    ``input_tokens`` should be UNCACHED input tokens (billed at full rate).
+    ``cached_read_tokens`` are input tokens served from a cache.
+    ``cached_write_tokens`` are input tokens written to the cache (Anthropic-style).
+    Returns 0.0 if the model is unknown.
+    """
     price = get_price(provider, model)
     if price is None:
         return 0.0
+    # Default cache rates fall back to the regular input rate if a model
+    # doesn't define them - so behavior is unchanged for non-caching workloads.
+    cached_read_rate = price.get("cached_read", price["input"])
+    cached_write_rate = price.get("cached_write", price["input"])
     return (
-        input_tokens * price["input"] + output_tokens * price["output"]
+        input_tokens * price["input"]
+        + output_tokens * price["output"]
+        + cached_read_tokens * cached_read_rate
+        + cached_write_tokens * cached_write_rate
     ) / 1_000_000
 
 

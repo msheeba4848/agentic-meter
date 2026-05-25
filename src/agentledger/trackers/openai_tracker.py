@@ -22,18 +22,31 @@ def _hash_prompt(messages: Any) -> Optional[str]:
 
 
 def _extract_usage(response: Any) -> Dict[str, Any]:
-    """Pull tokens, model, and finish_reason out of an OpenAI response."""
+    """Pull tokens, model, and finish_reason out of an OpenAI response.
+
+    OpenAI's prompt_tokens INCLUDES the cached portion, so we subtract to get
+    the uncached input. Cached tokens come from prompt_tokens_details.cached_tokens.
+    """
     out = {
         "input_tokens": 0,
         "output_tokens": 0,
+        "cached_read_tokens": 0,
         "model": "unknown",
         "finish_reason": None,
     }
     try:
         usage = getattr(response, "usage", None)
         if usage is not None:
-            out["input_tokens"] = getattr(usage, "prompt_tokens", 0) or 0
+            raw_prompt = getattr(usage, "prompt_tokens", 0) or 0
             out["output_tokens"] = getattr(usage, "completion_tokens", 0) or 0
+            # Cached tokens are reported in prompt_tokens_details (added 2024)
+            details = getattr(usage, "prompt_tokens_details", None)
+            cached = 0
+            if details is not None:
+                cached = getattr(details, "cached_tokens", 0) or 0
+            out["cached_read_tokens"] = cached
+            # Subtract cached from input so we don't double-bill
+            out["input_tokens"] = max(0, raw_prompt - cached)
         out["model"] = getattr(response, "model", "unknown") or "unknown"
         choices = getattr(response, "choices", None) or []
         if choices:
@@ -57,7 +70,7 @@ def patch_openai() -> None:
         return  # openai SDK not installed
 
     # Late import to avoid circular dependency
-    from ..ledger import _current_ledger, _sdk_tracking_suppressed
+    from ..ledger import _current_ledger
 
     _originals["sync"] = Completions.create
     _originals["async"] = AsyncCompletions.create
@@ -82,6 +95,7 @@ def patch_openai() -> None:
             model=info["model"],
             input_tokens=info["input_tokens"],
             output_tokens=info["output_tokens"],
+            cached_read_tokens=info["cached_read_tokens"],
             duration=duration,
             finish_reason=info["finish_reason"],
             prompt_hash=prompt_hash,
@@ -89,8 +103,10 @@ def patch_openai() -> None:
 
     def sync_create(self, *args, **kwargs):
         ledger = _current_ledger.get()
-        # Bail if there is no ledger which is active or if there is a higher intregation (for example, LangChain callback) which will handle this call
-        if ledger is None or _sdk_tracking_suppressed.get() > 0:
+        # Bail if no ledger active, or if a higher-level integration (like the
+        # LangChain callback) is already handling this call - the suppression
+        # attribute is on the Ledger instance so it's visible across contexts.
+        if ledger is None or ledger._suppress_sdk > 0:
             return _originals["sync"](self, *args, **kwargs)
         start = time.time()
         try:
@@ -103,7 +119,7 @@ def patch_openai() -> None:
 
     async def async_create(self, *args, **kwargs):
         ledger = _current_ledger.get()
-        if ledger is None:
+        if ledger is None or ledger._suppress_sdk > 0:
             return await _originals["async"](self, *args, **kwargs)
         start = time.time()
         try:
