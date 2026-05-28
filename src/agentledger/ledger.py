@@ -457,6 +457,66 @@ class Ledger:
             key = (c.error or "unknown").split(":")[0].strip() or "unknown"
             out[key] = out.get(key, 0) + 1
         return out
+    
+    def detect_agent_loops(self, min_calls: int = 5) -> List[Dict[str, Any]]:
+        """Detect tagged agents with many LLM calls in one ledger run.
+
+        A common failure mode in tool-calling agents is to loop: the agent
+        keeps calling tools instead of returning a final answer, often
+        exhausting ``max_iterations``. This flags any tag (innermost) with at
+        least ``min_calls`` calls. Use ``context_growth_ratio`` to judge
+        severity:
+
+        - Near 1.0: legitimate multi-step work; each call processes a similar
+          amount of context.
+        - 2x or more: conversation history is accumulating, which usually
+          means the agent is stuck in a tool-calling loop.
+
+        Returns dicts sorted by call count (highest first), each with::
+
+            {
+              "tag": str,
+              "calls": int,
+              "cost": float,
+              "input_tokens": int,
+              "avg_input_per_call": int,
+              "first_call_input_tokens": int,
+              "last_call_input_tokens": int,
+              "context_growth_ratio": float,
+            }
+        """
+        tag_groups: Dict[str, List[Call]] = {}
+        for c in self.calls:
+            if c.failed:
+                continue
+            tag = c.tags[-1] if c.tags else None
+            if tag is None:
+                continue
+            tag_groups.setdefault(tag, []).append(c)
+
+        loops: List[Dict[str, Any]] = []
+        for tag, calls in tag_groups.items():
+            if len(calls) < min_calls:
+                continue
+            calls_sorted = sorted(calls, key=lambda c: c.timestamp)
+            first_input = calls_sorted[0].input_tokens
+            last_input = calls_sorted[-1].input_tokens
+            growth = (
+                round(last_input / first_input, 1) if first_input > 0 else 0.0
+            )
+            total_input = sum(c.input_tokens for c in calls)
+            loops.append({
+                "tag": tag,
+                "calls": len(calls),
+                "cost": sum(c.cost for c in calls),
+                "input_tokens": total_input,
+                "avg_input_per_call": total_input // len(calls),
+                "first_call_input_tokens": first_input,
+                "last_call_input_tokens": last_input,
+                "context_growth_ratio": growth,
+            })
+        loops.sort(key=lambda x: -x["calls"])
+        return loops
 
     # ---- Caching analysis ----
 

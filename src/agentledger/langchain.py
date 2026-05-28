@@ -348,3 +348,5 @@ class AgentLedgerCallback(BaseCallbackHandler):
             return hashlib.sha256(s.encode()).hexdigest()[:16]
         except Exception:
             return None
+
+        

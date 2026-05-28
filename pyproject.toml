@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agentledger"
-version = "0.2.0"
+version = "0.3.0"
 description = "FinOps for LLM agents: budgets, counterfactual costs, and waste tracking for OpenAI and Anthropic"
 readme = "README.md"
 license = { text = "MIT" }
