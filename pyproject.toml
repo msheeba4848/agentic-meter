@@ -9,7 +9,7 @@ description = "FinOps for LLM agents: budgets, counterfactual costs, and waste t
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
-authors = [{ name = "Your Name", email = "you@example.com" }]
+authors = [{ name = "Sheeba Moghal", email = "sm3924@georgetown.edu"}]
 keywords = ["llm", "openai", "anthropic", "cost", "budget", "finops", "agents", "tracking", "observability"]
 classifiers = [
     "Development Status :: 3 - Alpha",
