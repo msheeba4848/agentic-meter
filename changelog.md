@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to agentledger. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [Semantic Versioning](https://semver.org/) once the package is past v1.0.0. Pre-1.0, minor versions may include breaking changes.
+All notable changes to agenticmeter. Format inspired by [Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versioning follows [Semantic Versioning](https://semver.org/) once the package is past v1.0.0. Pre-1.0, minor versions may include breaking changes.
 
 ---
 
@@ -61,7 +61,7 @@ The first version published to PyPI. Built and dogfooded across multiple multi-a
 - "Agent loops detected" section in summary with `stuck`/`active` labels based on growth ≥2x
 
 **Pricing data**
-- Standalone JSON file at `src/agentledger/prices.json` — no code changes needed to update prices
+- Standalone JSON file at `src/agenticmeter/prices.json` — no code changes needed to update prices
 - Coverage: gpt-4o, gpt-4o-mini, gpt-4-turbo, gpt-4, gpt-3.5-turbo, o1, o1-mini, o3-mini, claude-3-opus, claude-3-5-sonnet, claude-3-5-haiku, claude-3-haiku, claude-3-sonnet, plus dated variants
 - `reload_prices()` for runtime updates
 - Prefix matching for dated model strings
@@ -105,6 +105,6 @@ The first version published to PyPI. Built and dogfooded across multiple multi-a
 - Native Google Gemini tracker
 - `@track_llm_call` decorator for custom wrappers (covers any provider via user-supplied extractor)
 - Automatic ContextVar propagation through `ThreadPoolExecutor` and `asyncio.create_task`
-- CLI: `agentledger analyze <ledger.json>` for retrospective reports
+- CLI: `agenticmeter analyze <ledger.json>` for retrospective reports
 - Pre-flight cost estimation from saved run history
 - Cost regression testing fixture for pytest

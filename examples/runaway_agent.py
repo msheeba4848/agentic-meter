@@ -1,12 +1,12 @@
 """Runaway agent demo: budget enforcement stops an infinite retry loop.
 
 This is the headline use case. An agent in a bad retry loop would burn
-unbounded money. agentledger raises BudgetExceeded so the loop fails
+unbounded money. agenticmeter raises BudgetExceeded so the loop fails
 fast instead.
 
 Run: python examples/runaway_agent.py
 """
-from agentledger import Ledger, BudgetExceeded, get_current_ledger
+from agenticmeter import Ledger, BudgetExceeded, get_current_ledger
 
 
 def buggy_agent_loop():

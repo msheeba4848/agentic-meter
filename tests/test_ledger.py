@@ -1,6 +1,6 @@
 """Tests for the Ledger class. These run without any provider SDK installed."""
 import pytest
-from agentledger import Ledger, BudgetExceeded, get_current_ledger
+from agenticmeter import Ledger, BudgetExceeded, get_current_ledger
 
 
 def test_basic_recording():

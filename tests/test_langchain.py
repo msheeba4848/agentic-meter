@@ -6,8 +6,8 @@ shapes LangChain produces.
 """
 import pytest
 from uuid import uuid4
-from agentledger import Ledger
-from agentledger.langchain import AgentLedgerCallback, _HAS_LANGCHAIN
+from agenticmeter import Ledger
+from agenticmeter.langchain import agenticmeterCallback, _HAS_LANGCHAIN
 
 
 # In case the langchain-core isnt installed, all these tests are skipped.
@@ -40,7 +40,7 @@ class MockLLMResult:
 
 
 def test_extract_openai_token_usage_from_llm_output():
-    cb = AgentLedgerCallback()
+    cb = agenticmeterCallback()
     result = MockLLMResult(
         llm_output={
             "token_usage": {
@@ -61,7 +61,7 @@ def test_extract_openai_token_usage_from_llm_output():
 
 
 def test_extract_anthropic_token_usage_from_llm_output():
-    cb = AgentLedgerCallback()
+    cb = agenticmeterCallback()
     result = MockLLMResult(
         llm_output={
             "usage": {"input_tokens": 200, "output_tokens": 75},
@@ -76,7 +76,7 @@ def test_extract_anthropic_token_usage_from_llm_output():
 
 def test_extract_falls_back_to_message_usage_metadata():
     """Newer langchain-openai puts usage_metadata on the message, not llm_output."""
-    cb = AgentLedgerCallback()
+    cb = agenticmeterCallback()
     message = MockMessage(
         usage_metadata={"input_tokens": 30, "output_tokens": 15},
         response_metadata={"model_name": "gpt-4o-mini", "finish_reason": "stop"},
@@ -92,7 +92,7 @@ def test_extract_falls_back_to_message_usage_metadata():
 
 
 def test_callback_records_into_active_ledger():
-    cb = AgentLedgerCallback()
+    cb = agenticmeterCallback()
     run_id = uuid4()
 
     result = MockLLMResult(
@@ -117,7 +117,7 @@ def test_callback_records_into_active_ledger():
 
 
 def test_callback_records_failure_on_error():
-    cb = AgentLedgerCallback()
+    cb = agenticmeterCallback()
     run_id = uuid4()
 
     with Ledger() as ledger:
@@ -133,7 +133,7 @@ def test_callback_records_failure_on_error():
 
 def test_callback_no_op_when_no_active_ledger():
     """The callback should silently do nothing when no Ledger is active."""
-    cb = AgentLedgerCallback()
+    cb = agenticmeterCallback()
     run_id = uuid4()
 
     cb.on_chat_model_start(serialized={}, messages=[[]], run_id=run_id)
@@ -146,7 +146,7 @@ def test_callback_no_op_when_no_active_ledger():
 
 def test_callback_with_tags_via_ledger():
     """Tagged blocks should attribute callback-recorded calls correctly."""
-    cb = AgentLedgerCallback()
+    cb = agenticmeterCallback()
 
     result_a = MockLLMResult(
         llm_output={
@@ -178,7 +178,7 @@ def test_callback_with_tags_via_ledger():
 
 
 def test_provider_inference():
-    cb = AgentLedgerCallback()
+    cb = agenticmeterCallback()
     assert cb._guess_provider("gpt-4o-mini") == "openai"
     assert cb._guess_provider("claude-3-5-sonnet-20241022") == "anthropic"
     assert cb._guess_provider("o1-preview") == "openai"

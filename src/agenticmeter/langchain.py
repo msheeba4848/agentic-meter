@@ -1,4 +1,4 @@
-"""LangChain callback handler for agentledger.
+"""LangChain callback handler for agenticmeter.
 
 LangChain wraps provider responses in its own `LLMResult` object, and token
 usage lives in `llm_output['token_usage']` or `generations[0][0].message.usage_metadata`
@@ -7,12 +7,12 @@ correctly and works for both chat models and completion models, sync and async,
 streaming and non-streaming.
 
 Use this whenever you're working through LangChain — the raw-SDK monkey-patch
-in agentledger.trackers will fire but won't extract tokens correctly because
+in agenticmeter.trackers will fire but won't extract tokens correctly because
 LangChain's calling pattern hides the usage object.
 
 Quickstart:
 
-    from agentledger import Ledger
+    from agenticmeter import Ledger
     from langchain_openai import ChatOpenAI
 
     llm = ChatOpenAI(model="gpt-4o-mini")
@@ -48,7 +48,7 @@ except ImportError:
 from .ledger import _current_ledger
 
 
-class AgentLedgerCallback(BaseCallbackHandler):
+class agenticmeterCallback(BaseCallbackHandler):
     """LangChain callback that records LLM calls into the active Ledger.
 
     Created via ``ledger.as_langchain_callback()``. The callback reads the
@@ -59,8 +59,8 @@ class AgentLedgerCallback(BaseCallbackHandler):
     def __init__(self):
         if not _HAS_LANGCHAIN:
             raise ImportError(
-                "langchain-core is required for AgentLedgerCallback. "
-                "Install with: pip install 'agentledger[langchain]' "
+                "langchain-core is required for agenticmeterCallback. "
+                "Install with: pip install 'agenticmeter[langchain]' "
                 "or: pip install langchain-core"
             )
         # Per-run state keyed by run_id (UUID)
@@ -320,7 +320,7 @@ class AgentLedgerCallback(BaseCallbackHandler):
         except (AttributeError, IndexError, TypeError):
             pass
 
-        provider = AgentLedgerCallback._guess_provider(model)
+        provider = agenticmeterCallback._guess_provider(model)
         return usage, model, provider, finish_reason
 
     @staticmethod

@@ -1,11 +1,11 @@
-# agentledger
+# agenticmeter
 
 **FinOps for LLM agents.** Budget caps that actually stop runaway calls. Waste decomposition that shows where the money went. Caching analysis that tells you what to fix. Agent-loop detection for multi-agent pipelines.
 
 Drop-in for OpenAI and Anthropic. Works with LangChain. Zero runtime dependencies in core. No backend, no account, no telemetry.
 
 ```python
-from agentledger import Ledger
+from agenticmeter import Ledger
 import openai
 
 client = openai.OpenAI()
@@ -30,18 +30,18 @@ Every other tool in this space — tokencost, LangSmith, Langfuse, Helicone, Lit
 - That your invoice_agent is stuck in a tool-calling loop, eating $0.30 per run before giving up
 - That a 2,500-token system prompt is being sent uncached on every iteration when caching would cut that input cost by 90%
 
-agentledger does. It's the layer that sits between your code and your monthly OpenAI/Anthropic bill, and it turns vague "this feels expensive" feelings into specific dollar-denominated decisions.
+agenticmeter does. It's the layer that sits between your code and your monthly OpenAI/Anthropic bill, and it turns vague "this feels expensive" feelings into specific dollar-denominated decisions.
 
-It also enforces budgets *in-process*. Other tools warn you tomorrow. agentledger raises `BudgetExceeded` on the next call, the moment you cross the line — so a runaway agent stops at $2.00 instead of $200.
+It also enforces budgets *in-process*. Other tools warn you tomorrow. agenticmeter raises `BudgetExceeded` on the next call, the moment you cross the line — so a runaway agent stops at $2.00 instead of $200.
 
 ## Install
 
 ```bash
-pip install agentledger              # core only, zero deps
-pip install agentledger[openai]      # + OpenAI auto-tracking
-pip install agentledger[anthropic]   # + Anthropic auto-tracking
-pip install agentledger[langchain]   # + LangChain callback handler
-pip install agentledger[all]         # everything
+pip install agenticmeter              # core only, zero deps
+pip install agenticmeter[openai]      # + OpenAI auto-tracking
+pip install agenticmeter[anthropic]   # + Anthropic auto-tracking
+pip install agenticmeter[langchain]   # + LangChain callback handler
+pip install agenticmeter[all]         # everything
 ```
 
 Core has zero runtime dependencies. SDKs are optional extras — install only what you use.
@@ -51,7 +51,7 @@ Core has zero runtime dependencies. SDKs are optional extras — install only wh
 ### OpenAI
 
 ```python
-from agentledger import Ledger
+from agenticmeter import Ledger
 from openai import OpenAI
 
 client = OpenAI()
@@ -68,7 +68,7 @@ print(ledger.summary())
 ### Anthropic
 
 ```python
-from agentledger import Ledger
+from agenticmeter import Ledger
 from anthropic import Anthropic
 
 client = Anthropic()
@@ -88,7 +88,7 @@ print(ledger.summary())
 LangChain wraps responses differently than the raw SDKs, so it has its own callback handler that extracts tokens correctly and handles per-agent attribution.
 
 ```python
-from agentledger import Ledger
+from agenticmeter import Ledger
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(model="gpt-4o-mini")
@@ -180,7 +180,7 @@ print(ledger.summary())
 ### Decorator
 
 ```python
-from agentledger import track_budget
+from agenticmeter import track_budget
 
 @track_budget("$0.50", on_complete=lambda l: print(l.summary()))
 def answer_question(q):
@@ -219,7 +219,7 @@ Native auto-trackers for Bedrock, Azure, and Gemini are planned for v0.4. Until 
 
 ## How it compares
 
-|  | agentledger | tokencost | LangSmith | Langfuse | LiteLLM |
+|  | agenticmeter | tokencost | LangSmith | Langfuse | LiteLLM |
 |---|:---:|:---:|:---:|:---:|:---:|
 | Cost calculation | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Budget *enforcement* in-process | ✅ | — | — | — | proxy only |
@@ -276,7 +276,7 @@ ledger.to_json()                        # JSON string
 
 ## Pricing data
 
-Prices live in [`src/agentledger/prices.json`](src/agentledger/prices.json). Standard non-batch rates. Cache rates included: OpenAI cached reads at 50% of input, Anthropic at 10% read / 125% write.
+Prices live in [`src/agenticmeter/prices.json`](src/agenticmeter/prices.json). Standard non-batch rates. Cache rates included: OpenAI cached reads at 50% of input, Anthropic at 10% read / 125% write.
 
 To add a model or update a price, edit the JSON — no code changes.
 

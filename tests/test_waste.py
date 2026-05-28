@@ -1,6 +1,6 @@
 """Tests for waste detection: retries, truncations, failed calls."""
 import time
-from agentledger import Ledger
+from agenticmeter import Ledger
 
 
 def test_retry_detection_same_prompt_hash():

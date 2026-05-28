@@ -1,5 +1,5 @@
 """Stress tests for waste decomposition and caching. No API calls needed."""
-from agentledger import Ledger
+from agenticmeter import Ledger
 import random
 
 # ---- Test 1: waste decomposition under high volume ----

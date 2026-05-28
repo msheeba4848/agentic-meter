@@ -1,5 +1,5 @@
 """Tests for the pricing module."""
-from agentledger.pricing import (
+from agenticmeter.pricing import (
     get_price,
     calculate_cost,
     list_models,

@@ -377,15 +377,15 @@ class Ledger:
         """Return a LangChain BaseCallbackHandler that records into this Ledger.
 
         Requires langchain-core to be installed:
-            pip install 'agentledger[langchain]'
+            pip install 'agenticmeter[langchain]'
 
         Example:
             with Ledger(budget='$1.00') as ledger:
                 cb = ledger.as_langchain_callback()
                 response = llm.invoke('hello', config={'callbacks': [cb]})
         """
-        from .langchain import AgentLedgerCallback
-        return AgentLedgerCallback()
+        from .langchain import agenticmeterCallback
+        return agenticmeterCallback()
 
     # ---- Waste decomposition ----
 

@@ -1,6 +1,6 @@
-# agentledger Documentation
+# agenticmeter Documentation
 
-In-depth reference for the agentledger package. For the elevator pitch and install instructions, see [`README.md`](README.md). For the version history, see [`CHANGELOG.md`](CHANGELOG.md).
+In-depth reference for the agenticmeter package. For the elevator pitch and install instructions, see [`README.md`](README.md). For the version history, see [`CHANGELOG.md`](CHANGELOG.md).
 
 ---
 
@@ -30,19 +30,19 @@ In-depth reference for the agentledger package. For the elevator pitch and insta
 Requires Python 3.9 or later.
 
 ```bash
-pip install agentledger              # core only, zero runtime dependencies
-pip install agentledger[openai]      # adds openai>=1.0.0
-pip install agentledger[anthropic]   # adds anthropic>=0.20.0
-pip install agentledger[langchain]   # adds langchain-core>=0.3.0
-pip install agentledger[all]         # everything above
-pip install agentledger[dev]         # for contributors: adds pytest, pytest-asyncio
+pip install agenticmeter              # core only, zero runtime dependencies
+pip install agenticmeter[openai]      # adds openai>=1.0.0
+pip install agenticmeter[anthropic]   # adds anthropic>=0.20.0
+pip install agenticmeter[langchain]   # adds langchain-core>=0.3.0
+pip install agenticmeter[all]         # everything above
+pip install agenticmeter[dev]         # for contributors: adds pytest, pytest-asyncio
 ```
 
 For local development:
 
 ```bash
-git clone https://github.com/yourusername/agentledger.git
-cd agentledger
+git clone https://github.com/msheeba4848/agentic-meter.git
+cd agenticmeter
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
@@ -68,7 +68,7 @@ pytest tests/
 ## The Ledger class
 
 ```python
-from agentledger import Ledger
+from agenticmeter import Ledger
 
 ledger = Ledger(
     budget="$5.00",                # cap in USD; raises BudgetExceeded when exceeded
@@ -92,7 +92,7 @@ When the `with` block exits, the SDK patches stop recording (they check whether 
 ### Using the decorator form
 
 ```python
-from agentledger import track_budget
+from agenticmeter import track_budget
 
 @track_budget("$0.50", name="qa_agent")
 def answer_question(q):
@@ -102,7 +102,7 @@ def answer_question(q):
 ### Accessing the active ledger from inside any function
 
 ```python
-from agentledger import get_current_ledger
+from agenticmeter import get_current_ledger
 
 def my_function():
     ledger = get_current_ledger()
@@ -117,7 +117,7 @@ def my_function():
 ### OpenAI
 
 ```python
-from agentledger import Ledger
+from agenticmeter import Ledger
 from openai import OpenAI, AsyncOpenAI
 
 # Sync
@@ -140,7 +140,7 @@ The patch covers `Completions.create` and `AsyncCompletions.create`. Streaming (
 ### Anthropic
 
 ```python
-from agentledger import Ledger
+from agenticmeter import Ledger
 from anthropic import Anthropic, AsyncAnthropic
 
 client = Anthropic()
@@ -159,7 +159,7 @@ Same caveats as OpenAI re streaming.
 LangChain wraps responses differently than the raw SDKs, so we provide a callback handler that extracts tokens correctly. See [The LangChain callback](#the-langchain-callback) for the full guide.
 
 ```python
-from agentledger import Ledger
+from agenticmeter import Ledger
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(model="gpt-4o-mini")
@@ -193,7 +193,7 @@ If you have a wrapper function that every call passes through, instrument that f
 The killer feature. Set a cap; runaway agents fail fast.
 
 ```python
-from agentledger import Ledger, BudgetExceeded
+from agenticmeter import Ledger, BudgetExceeded
 
 try:
     with Ledger(budget="$5.00") as ledger:
@@ -265,7 +265,7 @@ The outer tag is preserved on the `Call.tags` list — useful if you want to sli
 
 ```python
 from contextlib import nullcontext
-from agentledger import get_current_ledger
+from agenticmeter import get_current_ledger
 
 def _tag(name):
     ledger = get_current_ledger()
@@ -281,7 +281,7 @@ def my_agent_step():
 
 ## Waste decomposition
 
-agentledger flags three categories of wasted spend:
+agenticmeter flags three categories of wasted spend:
 
 **Retries.** Identical prompts sent within `retry_window_seconds` (default 60). Hash-based detection means semantically equivalent but textually different prompts are missed.
 
@@ -311,7 +311,7 @@ For batch jobs that legitimately reuse prompts hours apart, set this small or fi
 
 ## Caching analysis
 
-Both OpenAI and Anthropic support prompt caching. agentledger extracts cache fields from both providers automatically and shows:
+Both OpenAI and Anthropic support prompt caching. agenticmeter extracts cache fields from both providers automatically and shows:
 
 - **Cache hit rate** — fraction of input tokens served from cache
 - **Realized savings** — USD saved this run from cache hits
@@ -363,7 +363,7 @@ ledger.savings_opportunities()       # list, sorted by biggest savings
 - Dedupes dated variants with identical prices (e.g., `gpt-4o-mini` and `gpt-4o-mini-2024-07-18`)
 - Returns top alternatives sorted by biggest savings
 
-The math is straightforward — same tokens, different price — so it's accurate for OpenAI/Anthropic models. The catch: a cheaper model may produce different output quality. agentledger does not assess quality; it only does the cost arithmetic.
+The math is straightforward — same tokens, different price — so it's accurate for OpenAI/Anthropic models. The catch: a cheaper model may produce different output quality. agenticmeter does not assess quality; it only does the cost arithmetic.
 
 ---
 
@@ -405,7 +405,7 @@ LangChain's `ChatOpenAI` and `ChatAnthropic` internally call the raw SDK, so our
 The fix: a proper LangChain callback handler that extracts tokens from `LLMResult.llm_output['token_usage']` (where LangChain actually puts them) and suppresses the raw-SDK tracker so the call isn't double-counted.
 
 ```python
-from agentledger import Ledger
+from agenticmeter import Ledger
 from langchain_openai import ChatOpenAI
 
 llm = ChatOpenAI(model="gpt-4o-mini")
@@ -512,7 +512,7 @@ def my_llm_wrapper(model, messages, **kwargs):
 
 ## Pricing data
 
-Prices live in [`src/agentledger/prices.json`](src/agentledger/prices.json). Per million tokens, USD, standard non-batch rates.
+Prices live in [`src/agenticmeter/prices.json`](src/agenticmeter/prices.json). Per million tokens, USD, standard non-batch rates.
 
 ```json
 {
@@ -530,7 +530,7 @@ Prices live in [`src/agentledger/prices.json`](src/agentledger/prices.json). Per
 
 **Cache rates.** OpenAI cached reads are 50% of input. Anthropic cached reads are 10% of input; cache writes are 125% of input. Models without `cached_read`/`cached_write` keys fall back to the normal input rate (so workloads without caching are unaffected).
 
-**Adding a model.** Edit the JSON. No code changes needed. Call `agentledger.reload_prices()` to pick up changes at runtime.
+**Adding a model.** Edit the JSON. No code changes needed. Call `agenticmeter.reload_prices()` to pick up changes at runtime.
 
 **Prefix matching.** Dated model strings (e.g., `gpt-4o-2024-12-15`) match the longest known prefix in prices.json. So adding the base name (`gpt-4o`) covers all date-suffixed variants.
 
@@ -616,7 +616,7 @@ class Call:
 
 | Class | When raised |
 |---|---|
-| `AgentLedgerError` | Base class for all package exceptions |
+| `agenticmeterError` | Base class for all package exceptions |
 | `BudgetExceeded` | When a tracked operation crosses the configured budget |
 
 ---
@@ -665,9 +665,9 @@ Automated propagation is planned for v0.4.
 
 ## Troubleshooting
 
-**`ModuleNotFoundError: No module named 'agentledger'`** — your environment isn't the one where you installed it. If running in Jupyter, check `sys.executable` — it should point to the `.venv` you installed the package into. See [README "Notebook setup"](README.md) if needed.
+**`ModuleNotFoundError: No module named 'agenticmeter'`** — your environment isn't the one where you installed it. If running in Jupyter, check `sys.executable` — it should point to the `.venv` you installed the package into. See [README "Notebook setup"](README.md) if needed.
 
-**Ledger records 0 calls inside a `with` block.** Either the SDK isn't installed (e.g., you have `agentledger` but not `agentledger[openai]`), or the call is going through a path we don't patch (streaming, a custom HTTP client). Run `import agentledger; print(agentledger.__version__)` to confirm the package is current.
+**Ledger records 0 calls inside a `with` block.** Either the SDK isn't installed (e.g., you have `agenticmeter` but not `agenticmeter[openai]`), or the call is going through a path we don't patch (streaming, a custom HTTP client). Run `import agenticmeter; print(agenticmeter.__version__)` to confirm the package is current.
 
 **LangChain calls show 0 tokens but the call count is right.** You haven't passed the callback through. Either add `config={"callbacks": [ledger.as_langchain_callback()]}` to your `.invoke()` call, or the call is happening on a streaming path. The LangChain callback handles non-streaming `.invoke()` and `.ainvoke()`.
 

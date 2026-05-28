@@ -27,10 +27,10 @@ For LangChain (use the callback handler, not the raw-SDK monkey-patch):
         llm.invoke("hello", config={"callbacks": [cb]})
 """
 from .ledger import Ledger, Call, track_budget, get_current_ledger
-from .exceptions import BudgetExceeded, AgentLedgerError
+from .exceptions import BudgetExceeded, agenticmeterError
 from .pricing import calculate_cost, get_price, list_models, reload_prices
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"
 
 __all__ = [
     "Ledger",
@@ -38,7 +38,7 @@ __all__ = [
     "track_budget",
     "get_current_ledger",
     "BudgetExceeded",
-    "AgentLedgerError",
+    "agenticmeterError",
     "calculate_cost",
     "get_price",
     "list_models",

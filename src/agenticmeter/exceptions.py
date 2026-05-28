@@ -1,12 +1,12 @@
-"""Custom exceptions for agentledger."""
+"""Custom exceptions for agenticmeter."""
 from typing import Optional
 
 
-class AgentLedgerError(Exception):
-    """Base exception for all agentledger errors."""
+class agenticmeterError(Exception):
+    """Base exception for all agenticmeter errors."""
 
 
-class BudgetExceeded(AgentLedgerError):
+class BudgetExceeded(agenticmeterError):
     """Raised when a tracked operation has exceeded the configured budget.
 
     Attributes:

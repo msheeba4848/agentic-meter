@@ -3,7 +3,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentledger"
+name = "agenticmeter"
 version = "0.3.0"
 description = "FinOps for LLM agents: budgets, counterfactual costs, and waste tracking for OpenAI and Anthropic"
 readme = "README.md"
@@ -39,17 +39,17 @@ dev = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/yourusername/agentledger"
-Issues = "https://github.com/yourusername/agentledger/issues"
-Source = "https://github.com/yourusername/agentledger"
+Homepage = "https://github.com/msheeba4848/agentic-meter"
+Issues = "https://github.com/msheeba4848/agentic-meter/issues"
+Source = "https://github.com/msheeba4848/agentic-meter"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentledger"]
+packages = ["src/agenticmeter"]
 
 [tool.hatch.build]
 include = [
-    "src/agentledger/**/*.py",
-    "src/agentledger/**/*.json",
+    "src/agenticmeter/**/*.py",
+    "src/agenticmeter/**/*.json",
 ]
 
 [tool.pytest.ini_options]

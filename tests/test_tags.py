@@ -1,5 +1,5 @@
 """Tests for the tag system (per-agent attribution)."""
-from agentledger import Ledger
+from agenticmeter import Ledger
 
 
 def test_basic_tag_attribution():

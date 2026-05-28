@@ -1,12 +1,12 @@
 """Multi-agent LangChain pipeline with per-agent cost attribution.
 
-Requires: pip install 'agentledger[langchain]' langchain-openai
+Requires: pip install 'agenticmeter[langchain]' langchain-openai
 
 Set OPENAI_API_KEY in your environment, then run:
     python examples/langchain_multi_agent.py
 """
 import os
-from agentledger import Ledger
+from agenticmeter import Ledger
 from langchain_openai import ChatOpenAI
 
 

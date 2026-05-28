@@ -1,11 +1,11 @@
-"""Basic usage of agentledger.
+"""Basic usage of agenticmeter.
 
 Run with: python examples/basic_usage.py
 
 This example uses manual recording (no SDK calls) so it works without
 API keys. See `examples/with_openai.py` for the real-SDK version.
 """
-from agentledger import Ledger, track_budget
+from agenticmeter import Ledger, track_budget
 
 
 def manual_example():
@@ -27,7 +27,7 @@ def manual_example():
 @track_budget("$0.50", on_complete=lambda l: print(l.summary()))
 def my_agent_run(query: str):
     """A decorated 'agent' function. The whole call runs inside a Ledger."""
-    from agentledger import get_current_ledger
+    from agenticmeter import get_current_ledger
     # In real code these would be OpenAI/Anthropic SDK calls, auto-tracked.
     # Here we simulate via manual record() on the active ledger.
     ledger = get_current_ledger()
