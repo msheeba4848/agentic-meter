@@ -66,7 +66,7 @@ from .ledger import (
 from .exceptions import BudgetExceeded, AgenticMeterError, agenticmeterError
 from .pricing import calculate_cost, get_price, list_models, reload_prices
 
-__version__ = "0.4.0"
+__version__ = "0.4.1"
 
 __all__ = [
     "Ledger",
