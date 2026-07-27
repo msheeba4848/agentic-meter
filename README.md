@@ -2,7 +2,7 @@
 
 **FinOps for LLM agents.** Budget caps that actually stop runaway calls. Waste decomposition that shows where the money went. Caching analysis that tells you what to fix. Agent-loop detection for multi-agent pipelines.
 
-Drop-in for OpenAI and Anthropic. Works with LangChain. Zero runtime dependencies in core. No backend, no account, no telemetry.
+Drop-in for OpenAI, Anthropic, and AWS Bedrock. Works with LangChain. One-line integration for any custom wrapper. Zero runtime dependencies in core. No backend, no account, no telemetry.
 
 ```python
 from agenticmeter import Ledger
@@ -40,6 +40,7 @@ It also enforces budgets *in-process*. Other tools warn you tomorrow. agenticmet
 pip install agenticmeter              # core only, zero deps
 pip install agenticmeter[openai]      # + OpenAI auto-tracking
 pip install agenticmeter[anthropic]   # + Anthropic auto-tracking
+pip install agenticmeter[bedrock]     # + AWS Bedrock auto-tracking (new in v0.4)
 pip install agenticmeter[langchain]   # + LangChain callback handler
 pip install agenticmeter[all]         # everything
 ```
@@ -100,6 +101,58 @@ with Ledger(budget="$1.00") as ledger:
         result_a = llm.invoke("research topic A", config={"callbacks": [cb]})
     with ledger.tag("writer"):
         result_b = llm.invoke("write about it", config={"callbacks": [cb]})
+
+print(ledger.summary())
+```
+
+### AWS Bedrock (new in v0.4)
+
+Any `boto3.client('bedrock-runtime')` call inside a `Ledger` is auto-tracked. Works for Claude, Llama, Titan, and Nova.
+
+```python
+import boto3
+import json
+from agenticmeter import Ledger
+
+bedrock = boto3.client("bedrock-runtime", region_name="us-east-1")
+
+with Ledger(budget="$1.00", name="bedrock_test") as ledger:
+    response = bedrock.invoke_model(
+        modelId="anthropic.claude-3-5-sonnet-20241022-v2:0",
+        body=json.dumps({
+            "anthropic_version": "bedrock-2023-05-31",
+            "max_tokens": 200,
+            "messages": [{"role": "user", "content": "Hello!"}],
+        }),
+    )
+
+print(ledger.summary())
+```
+
+Prompt caching fields for Claude on Bedrock (`cache_read_input_tokens`, `cache_creation_input_tokens`) are extracted automatically. Response bodies remain readable after tracking — the tracker uses a replay wrapper so downstream code that does `response['body'].read()` still works.
+
+### Custom wrappers (Azure, Vertex, in-house routers)
+
+For providers or internal wrappers not natively supported, use the `@track_llm_call` decorator. Instrument once, track forever.
+
+```python
+from agenticmeter import track_llm_call, Ledger
+
+def extract_usage(response, args, kwargs):
+    return {
+        "provider": "anthropic",
+        "model": kwargs["model"],
+        "input_tokens": response["usage"]["input_tokens"],
+        "output_tokens": response["usage"]["output_tokens"],
+    }
+
+@track_llm_call(extract_usage=extract_usage)
+def my_bedrock_wrapper(prompt, model, max_tokens):
+    # Your existing wrapper that calls boto3 or any provider
+    return call_bedrock_or_whatever(...)
+
+with Ledger(budget="$1.00") as ledger:
+    my_bedrock_wrapper("hi", model="claude-3-5-sonnet-20241022-v2:0", max_tokens=100)
 
 print(ledger.summary())
 ```
@@ -204,18 +257,18 @@ with Ledger(budget="$1.00") as ledger:
 
 ## Provider support
 
-| Provider | Auto-tracked | LangChain | Manual record |
-|---|:---:|:---:|:---:|
-| OpenAI | ✅ | ✅ | ✅ |
-| Anthropic | ✅ | ✅ | ✅ |
-| Azure OpenAI | partial* | ✅ | ✅ |
-| AWS Bedrock | — | ✅ | ✅ |
-| Google Gemini | — | ✅ | ✅ |
-| Cohere, Mistral, etc. | — | ✅ | ✅ |
+| Provider | Auto-tracked | LangChain | Custom wrapper | Manual record |
+|---|:---:|:---:|:---:|:---:|
+| OpenAI | ✅ | ✅ | via `@track_llm_call` | ✅ |
+| Anthropic | ✅ | ✅ | via `@track_llm_call` | ✅ |
+| AWS Bedrock | ✅ (v0.4) | ✅ | via `@track_llm_call` | ✅ |
+| Azure OpenAI | via OpenAI tracker | ✅ | via `@track_llm_call` | ✅ |
+| Google Vertex / Gemini | — | ✅ | via `@track_llm_call` | ✅ |
+| Cohere, Mistral, everything else | — | ✅ | via `@track_llm_call` | ✅ |
 
-\* Azure OpenAI uses the `openai` SDK and works via the OpenAI auto-tracker; verified for non-streaming calls.
+Bedrock covers Anthropic Claude, Meta Llama, Amazon Titan, and Amazon Nova via `invoke_model` and `converse`. Use `pip install "agenticmeter[bedrock]"` to install boto3 as well.
 
-Native auto-trackers for Bedrock, Azure, and Gemini are planned for v0.4. Until then, instrument them inside your wrapper with `ledger.record(...)` or use LangChain's `ChatBedrock` / `AzureChatOpenAI` / `ChatGoogleGenerativeAI` which route through our callback handler.
+Native Vertex / Gemini trackers planned for v0.5. Until then, the `@track_llm_call` decorator handles them in one line.
 
 ## How it compares
 
@@ -232,12 +285,12 @@ Native auto-trackers for Bedrock, Azure, and Gemini are planned for v0.4. Until 
 | Works offline / no account | ✅ | ✅ | — | self-host | ✅ |
 | Zero core dependencies | ✅ | — | — | — | — |
 
-## Limitations (v0.3)
+## Limitations (v0.4)
 
-- **Streaming responses aren't auto-tracked yet.** Non-streaming `create()` calls only. Streaming planned for v0.4.
-- **Bedrock, Vertex AI, and Gemini lack native trackers.** Use manual `ledger.record()` or route via LangChain.
+- **Streaming responses aren't auto-tracked yet.** Non-streaming `create()` / `invoke_model()` calls only. Streaming planned for v0.5.
+- **Native Vertex / Gemini trackers still pending.** Use `@track_llm_call` for now.
 - **Prompt retry detection is text-hash based.** Semantically equivalent prompts with different wording are missed.
-- **Threading propagation is manual.** When using `ThreadPoolExecutor`, you need `ctx = contextvars.copy_context()` and `executor.submit(ctx.run, fn, ...)` for tags to propagate. Automated in v0.4.
+- **Tool-use costs (web search, code sandboxes) aren't tracked separately** from base LLM calls.
 
 ## Programmatic API
 
@@ -274,6 +327,25 @@ ledger.to_dict()                        # full structured data
 ledger.to_json()                        # JSON string
 ```
 
+## Threading and async
+
+Async works out of the box — `contextvars` propagate through awaited code and `asyncio.create_task`.
+
+Threads need one line. `ThreadPoolExecutor` doesn't propagate `contextvars` to worker threads by default, so LLM calls inside workers would see `get_current_ledger() == None` and go untracked. Wrap the executor:
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+from agenticmeter import Ledger, tracked_executor
+
+with Ledger() as ledger:
+    with ledger.tag("parallel_work"):
+        with tracked_executor(ThreadPoolExecutor(max_workers=8)) as ex:
+            futures = [ex.submit(worker_fn, item) for item in items]
+            results = [f.result() for f in futures]
+```
+
+`tracked_executor` captures the current context at wrap time, so any tags active when you call it propagate to workers. Wrap inside the tag block you want workers to inherit.
+
 ## Pricing data
 
 Prices live in [`src/agenticmeter/prices.json`](src/agenticmeter/prices.json). Standard non-batch rates. Cache rates included: OpenAI cached reads at 50% of input, Anthropic at 10% read / 125% write.
@@ -286,13 +358,13 @@ MIT.
 
 ## Status
 
-Alpha (v0.3.0). APIs may shift. Battle-tested on real multi-agent pipelines. File issues with rough edges — they're useful.
+Alpha (v0.4.0). APIs may shift. Battle-tested on real multi-agent pipelines including OpenAI, Anthropic, and Bedrock. File issues with rough edges — they're useful.
 
 ## Roadmap
 
-See [`CHANGELOG.md`](CHANGELOG.md) for what's shipped. Coming in v0.4:
+See [`changelog.md`](changelog.md) for what's shipped. Coming in v0.5:
 - Streaming response auto-tracking
-- Native Bedrock, Azure, and Gemini trackers
-- Custom-wrapper `@track_llm_call` decorator
-- Automatic ContextVar propagation through `ThreadPoolExecutor` and `asyncio`
+- Native Google Vertex / Gemini tracker
+- Native Azure OpenAI tracker with full parity
 - CLI for retrospective analysis of saved runs
+- Cost regression testing fixture for pytest

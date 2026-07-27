@@ -2,11 +2,11 @@
 from typing import Optional
 
 
-class agenticmeterError(Exception):
+class AgenticMeterError(Exception):
     """Base exception for all agenticmeter errors."""
 
 
-class BudgetExceeded(agenticmeterError):
+class BudgetExceeded(AgenticMeterError):
     """Raised when a tracked operation has exceeded the configured budget.
 
     Attributes:
@@ -24,3 +24,8 @@ class BudgetExceeded(agenticmeterError):
             or f"Budget exceeded: ${spent:.4f} spent, budget was ${budget:.4f}"
         )
         super().__init__(msg)
+
+
+# Backward-compat alias for v0.3.x (which shipped with a lowercase name).
+# New code should use AgenticMeterError. This alias will be removed in v1.0.
+agenticmeterError = AgenticMeterError

@@ -4,8 +4,8 @@ build-backend = "hatchling.build"
 
 [project]
 name = "agenticmeter"
-version = "0.3.0"
-description = "FinOps for LLM agents: budgets, counterfactual costs, and waste tracking for OpenAI and Anthropic"
+version = "0.4.0"
+description = "FinOps for LLM agents: budgets, waste tracking, and caching analysis for OpenAI, Anthropic, and AWS Bedrock"
 readme = "README.md"
 license = { text = "MIT" }
 requires-python = ">=3.9"
@@ -28,13 +28,15 @@ dependencies = []
 [project.optional-dependencies]
 openai = ["openai>=1.0.0"]
 anthropic = ["anthropic>=0.20.0"]
+bedrock = ["boto3>=1.28.0"]
 langchain = ["langchain-core>=0.3.0"]
-all = ["openai>=1.0.0", "anthropic>=0.20.0", "langchain-core>=0.3.0"]
+all = ["openai>=1.0.0", "anthropic>=0.20.0", "boto3>=1.28.0", "langchain-core>=0.3.0"]
 dev = [
     "pytest>=7.0",
     "pytest-asyncio>=0.21",
     "openai>=1.0.0",
     "anthropic>=0.20.0",
+    "boto3>=1.28.0",
     "langchain-core>=0.3.0",
 ]
 

@@ -128,6 +128,11 @@ class Ledger:
             patch_anthropic()
         except ImportError:
             pass
+        try:
+            from .trackers.bedrock_tracker import patch_bedrock
+            patch_bedrock()
+        except ImportError:
+            pass
 
     # ---- Recording ----
 
@@ -794,3 +799,134 @@ def track_budget(
 def get_current_ledger() -> Optional[Ledger]:
     """Return the currently active Ledger (or None if not inside a context)."""
     return _current_ledger.get()
+
+
+def track_llm_call(
+    extract_usage: Callable[[Any, tuple, dict], Optional[Dict[str, Any]]],
+    default_provider: str = "custom",
+    default_model: str = "unknown",
+):
+    """Decorator for instrumenting a custom LLM wrapper function.
+
+    Use this when you have your own function that calls Bedrock, Azure, Vertex,
+    or any other provider, and you want its calls recorded to the active Ledger
+    without touching every call site.
+
+    ``extract_usage`` is a function you provide that takes ``(response, args, kwargs)``
+    and returns a dict with keys ``provider``, ``model``, ``input_tokens``,
+    ``output_tokens``, and optionally ``cached_read_tokens``, ``cached_write_tokens``,
+    ``finish_reason``, ``prompt_hash``. Missing keys default to safe values.
+    Return None to skip recording this call (useful for cache hits your wrapper
+    handles internally, etc.).
+
+    Example:
+
+        from agenticmeter import track_llm_call, Ledger
+
+        def _extract(response, args, kwargs):
+            # `response` is whatever your wrapper returned
+            return {
+                "provider": "anthropic",
+                "model": kwargs.get("model", "claude-3-5-sonnet-20241022"),
+                "input_tokens": response["usage"]["input_tokens"],
+                "output_tokens": response["usage"]["output_tokens"],
+            }
+
+        @track_llm_call(extract_usage=_extract)
+        def my_bedrock_wrapper(prompt, model, max_tokens):
+            # ... your existing code that calls boto3 ...
+            return response
+
+        with Ledger(budget="$1.00") as l:
+            my_bedrock_wrapper("hello", "claude-3-5-sonnet-20241022", 100)
+        print(l.summary())
+    """
+    def decorator(func: Callable) -> Callable:
+        @functools.wraps(func)
+        def wrapper(*args, **kwargs):
+            ledger = _current_ledger.get()
+            # No ledger active or SDK-suppression on: pass through untouched
+            if ledger is None or ledger._suppress_sdk > 0:
+                return func(*args, **kwargs)
+            start = time.time()
+            try:
+                response = func(*args, **kwargs)
+            except Exception as e:
+                ledger.record(
+                    provider=default_provider,
+                    model=default_model,
+                    input_tokens=0,
+                    output_tokens=0,
+                    duration=time.time() - start,
+                    failed=True,
+                    error=str(e),
+                )
+                raise
+            duration = time.time() - start
+            try:
+                info = extract_usage(response, args, kwargs)
+            except Exception as e:
+                # extractor blew up: record with 0 tokens rather than lose the call
+                ledger.record(
+                    provider=default_provider,
+                    model=default_model,
+                    input_tokens=0,
+                    output_tokens=0,
+                    duration=duration,
+                    failed=True,
+                    error=f"extract_usage failed: {e}",
+                )
+                return response
+            if info is None:
+                return response  # extractor opted out
+            ledger.record(
+                provider=info.get("provider", default_provider),
+                model=info.get("model", default_model),
+                input_tokens=int(info.get("input_tokens", 0) or 0),
+                output_tokens=int(info.get("output_tokens", 0) or 0),
+                cached_read_tokens=int(info.get("cached_read_tokens", 0) or 0),
+                cached_write_tokens=int(info.get("cached_write_tokens", 0) or 0),
+                duration=duration,
+                finish_reason=info.get("finish_reason"),
+                prompt_hash=info.get("prompt_hash"),
+                metadata=info.get("metadata") or {},
+            )
+            return response
+        return wrapper
+    return decorator
+
+
+def tracked_executor(executor):
+    """Wrap a ThreadPoolExecutor so `.submit()` propagates the current Ledger.
+
+    Python's contextvars do NOT automatically propagate into threads spawned by
+    ThreadPoolExecutor. Without this wrapper, LLM calls made inside worker
+    threads see get_current_ledger() == None and are not recorded, and any tag
+    stack from the parent thread is invisible.
+
+    Usage:
+
+        from concurrent.futures import ThreadPoolExecutor
+        from agenticmeter import Ledger, tracked_executor
+
+        with Ledger() as ledger:
+            with ledger.tag("parallel_work"):
+                with tracked_executor(ThreadPoolExecutor(max_workers=8)) as ex:
+                    futures = [ex.submit(worker, item) for item in items]
+                    results = [f.result() for f in futures]
+
+    Each submit gets a fresh copy of the current context. So if you push tags
+    between submits, later submits see the newer tag stack. Contexts are
+    copied at submit time, not at wrap time.
+    """
+    original_submit = executor.submit
+
+    @functools.wraps(original_submit)
+    def submit_in_context(fn, *args, **kwargs):
+        # Fresh copy per submit - a Context can only be entered once at a time,
+        # so concurrent workers must each get their own.
+        ctx = contextvars.copy_context()
+        return original_submit(ctx.run, fn, *args, **kwargs)
+
+    executor.submit = submit_in_context
+    return executor
