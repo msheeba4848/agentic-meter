@@ -1,4 +1,4 @@
-# agenticmeter
+# agenticmeter (lol)
 
 **FinOps for LLM agents.** Budget caps that actually stop runaway calls. Waste decomposition that shows where the money went. Caching analysis that tells you what to fix. Agent-loop detection for multi-agent pipelines.
 
